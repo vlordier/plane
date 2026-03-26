@@ -84,8 +84,36 @@ class Adapter:
                 error_message="INVALID_EMAIL",
                 payload={"email": email},
             )
+        # Check email domain restriction
+        self.__check_email_domain(email)
+
         # Return email
         return email
+
+    def __check_email_domain(self, email):
+        """Reject login/signup when ALLOWED_EMAIL_DOMAINS is configured and the email domain is not in the list."""
+        (ALLOWED_EMAIL_DOMAINS,) = get_configuration_value([
+            {
+                "key": "ALLOWED_EMAIL_DOMAINS",
+                "default": os.environ.get("ALLOWED_EMAIL_DOMAINS", ""),
+            }
+        ])
+
+        if not ALLOWED_EMAIL_DOMAINS:
+            return
+
+        allowed_domains = [d.strip().lower() for d in ALLOWED_EMAIL_DOMAINS.split(",") if d.strip()]
+        if not allowed_domains:
+            return
+
+        domain = email.split("@", 1)[-1].lower()
+        if domain not in allowed_domains:
+            self.logger.warning(f"Email domain not allowed: {domain}")
+            raise AuthenticationException(
+                error_code=AUTHENTICATION_ERROR_CODES["EMAIL_DOMAIN_NOT_ALLOWED"],
+                error_message="EMAIL_DOMAIN_NOT_ALLOWED",
+                payload={"email": email},
+            )
 
     def validate_password(self, email):
         """Validate password strength"""
