@@ -5,7 +5,7 @@
  */
 
 // plane imports
-import { EUserPermissions } from "@plane/constants";
+import { EUserPermissions, PROJECT_ROLE_LABELS } from "@plane/constants";
 import type { EUserProjectRoles, EUserWorkspaceRoles } from "@plane/types";
 
 export const getUserRole = (role: EUserPermissions | EUserWorkspaceRoles | EUserProjectRoles) => {
@@ -17,6 +17,19 @@ export const getUserRole = (role: EUserPermissions | EUserWorkspaceRoles | EUser
     case EUserPermissions.ADMIN:
       return "ADMIN";
   }
+};
+
+/**
+ * Returns the human-readable project role label for a given permission level.
+ * Maps numeric roles to RBAC display names: Viewer / Contributor / Admin.
+ * @param role - The numeric permission level
+ * @returns The display label, or undefined if the role is unrecognized
+ */
+export const getProjectRoleLabel = (
+  role: EUserPermissions | EUserProjectRoles | EUserWorkspaceRoles | undefined
+): string | undefined => {
+  if (role === undefined) return undefined;
+  return PROJECT_ROLE_LABELS[role as EUserPermissions];
 };
 
 type TSupportedRole = EUserPermissions | EUserProjectRoles | EUserWorkspaceRoles;

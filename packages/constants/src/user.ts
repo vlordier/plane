@@ -61,5 +61,49 @@ export const USER_ALLOWED_PERMISSIONS: TUserAllowedPermissions = {
       read: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
     },
   },
-  project: {},
+  project: {
+    issue: {
+      read: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+      create: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+      update: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+      delete: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+    },
+    cycle: {
+      read: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+      create: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+      update: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+      delete: [EUserPermissions.ADMIN],
+    },
+    module: {
+      read: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+      create: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+      update: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+      delete: [EUserPermissions.ADMIN],
+    },
+    member: {
+      read: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+      create: [EUserPermissions.ADMIN],
+      update: [EUserPermissions.ADMIN],
+      delete: [EUserPermissions.ADMIN],
+    },
+    settings: {
+      read: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+      create: [EUserPermissions.ADMIN],
+      update: [EUserPermissions.ADMIN],
+      delete: [EUserPermissions.ADMIN],
+    },
+  },
+};
+
+/**
+ * Human-readable labels for project roles.
+ * Maps the numeric permission levels to the RBAC role names:
+ *   GUEST  (5)  → Viewer      (read-only access)
+ *   MEMBER (15) → Contributor (can create/edit issues, cycles, modules)
+ *   ADMIN  (20) → Admin       (full control including settings and members)
+ */
+export const PROJECT_ROLE_LABELS: Record<EUserPermissions, string> = {
+  [EUserPermissions.GUEST]: "Viewer",
+  [EUserPermissions.MEMBER]: "Contributor",
+  [EUserPermissions.ADMIN]: "Admin",
 };
