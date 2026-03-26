@@ -52,6 +52,11 @@ class MagicCodeProvider(CredentialAdapter):
         self.code = code
 
     def initiate(self):
+        # Enforce email format and domain restriction before issuing a magic link.
+        # sanitize_email() validates format and calls __check_email_domain(), raising
+        # AuthenticationException (INVALID_EMAIL or EMAIL_DOMAIN_NOT_ALLOWED) if needed.
+        self.sanitize_email(self.key)
+
         ## Generate a random token
         token = str(secrets.randbelow(900000) + 100000)
 
