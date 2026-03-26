@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from plane.db.models import User
 from plane.settings.redis import redis_instance
-from plane.license.models import Instance
+from plane.license.models import Instance, InstanceConfiguration
 
 
 @pytest.fixture
@@ -427,3 +427,237 @@ class TestMagicSignUp:
 
         # Check if user is authenticated
         assert "_auth_user_id" in django_client.session
+
+
+@pytest.mark.contract
+class TestEmailDomainRestriction:
+    """Test that ALLOWED_EMAIL_DOMAINS config restricts authentication.
+
+    The ``with_allowed_domains`` fixture sets the ALLOWED_EMAIL_DOMAINS
+    configuration row and removes it in teardown so that other tests in the
+    suite are not affected.
+    """
+
+    # ------------------------------------------------------------------
+    # Fixtures
+    # ------------------------------------------------------------------
+
+    @pytest.fixture
+    def with_allowed_domains(self, db):
+        """Yield a ``configure(value)`` callable that sets ALLOWED_EMAIL_DOMAINS.
+
+        The configuration row is removed automatically after the test.
+
+        Usage::
+
+            def test_something(self, with_allowed_domains, ...):
+                with_allowed_domains("company.com")
+                # domain restriction is now active for this test
+        """
+
+        def configure(value: str):
+            InstanceConfiguration.objects.update_or_create(
+                key="ALLOWED_EMAIL_DOMAINS",
+                defaults={
+                    "value": value,
+                    "category": "AUTHENTICATION",
+                    "is_encrypted": False,
+                },
+            )
+
+        yield configure
+
+        InstanceConfiguration.objects.filter(key="ALLOWED_EMAIL_DOMAINS").delete()
+
+    # ------------------------------------------------------------------
+    # Sign-in: blocked domains
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "allowed_config",
+        [
+            pytest.param("company.com", id="single-domain"),
+            pytest.param("company.com,subsidiary.org", id="multi-domain"),
+        ],
+    )
+    @pytest.mark.django_db
+    def test_sign_in_blocked_domain_returns_error(
+        self, django_client, db, setup_instance, with_allowed_domains, allowed_config
+    ):
+        """Sign-in from a domain absent from the allowlist produces EMAIL_DOMAIN_NOT_ALLOWED."""
+        user = User.objects.create(email="eve@external.io")
+        user.set_password("ValidPass!99")
+        user.save()
+
+        with_allowed_domains(allowed_config)
+        url = reverse("sign-in")
+        response = django_client.post(
+            url, {"email": "eve@external.io", "password": "ValidPass!99"}, follow=True
+        )
+        redirect_contents = " ".join(u for u, _ in response.redirect_chain)
+        assert "EMAIL_DOMAIN_NOT_ALLOWED" in redirect_contents
+
+    # ------------------------------------------------------------------
+    # Sign-in: allowed domains
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "allowed_config,email,password",
+        [
+            pytest.param("company.com", "alice@company.com", "ValidPass!99", id="single-domain"),
+            pytest.param(
+                "company.com,subsidiary.org",
+                "carol@subsidiary.org",
+                "ValidPass!99",
+                id="multi-domain-second-entry",
+            ),
+        ],
+    )
+    @pytest.mark.django_db
+    def test_sign_in_allowed_domain_succeeds(
+        self, django_client, db, setup_instance, with_allowed_domains, allowed_config, email, password
+    ):
+        """Sign-in from an allowed domain succeeds without an error code."""
+        user = User.objects.create(email=email)
+        user.set_password(password)
+        user.save()
+
+        with_allowed_domains(allowed_config)
+        url = reverse("sign-in")
+        response = django_client.post(url, {"email": email, "password": password}, follow=False)
+        assert response.status_code == 302
+        assert "error_code" not in response.url
+        assert "_auth_user_id" in django_client.session
+
+    # ------------------------------------------------------------------
+    # Sign-in: no restriction
+    # ------------------------------------------------------------------
+
+    @pytest.mark.django_db
+    def test_sign_in_no_restriction_allows_any_domain(
+        self, django_client, db, setup_instance, with_allowed_domains
+    ):
+        """When ALLOWED_EMAIL_DOMAINS is empty, any domain can sign in."""
+        user = User.objects.create(email="eve@external.io")
+        user.set_password("ValidPass!99")
+        user.save()
+
+        with_allowed_domains("")
+        url = reverse("sign-in")
+        response = django_client.post(
+            url, {"email": "eve@external.io", "password": "ValidPass!99"}, follow=False
+        )
+        assert response.status_code == 302
+        assert "EMAIL_DOMAIN_NOT_ALLOWED" not in response.url
+
+    # ------------------------------------------------------------------
+    # Sign-up: blocked domains
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "email",
+        [
+            pytest.param("newbie@external.io", id="external-io"),
+            pytest.param("attacker@other.net", id="other-net"),
+        ],
+    )
+    @pytest.mark.django_db
+    def test_sign_up_blocked_domain_returns_error(
+        self, django_client, db, setup_instance, with_allowed_domains, email
+    ):
+        """Sign-up with a blocked domain produces an error and no user is created."""
+        with_allowed_domains("company.com")
+        url = reverse("sign-up")
+        response = django_client.post(url, {"email": email, "password": "ValidPass!99"}, follow=True)
+        redirect_contents = " ".join(u for u, _ in response.redirect_chain)
+        assert "EMAIL_DOMAIN_NOT_ALLOWED" in redirect_contents
+        assert not User.objects.filter(email=email).exists()
+
+    # ------------------------------------------------------------------
+    # Sign-up: allowed domains
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "allowed_config,email",
+        [
+            pytest.param("company.com", "newuser@company.com", id="single-domain"),
+            pytest.param(
+                "company.com,subsidiary.org",
+                "newsubsid@subsidiary.org",
+                id="multi-domain-second-entry",
+            ),
+        ],
+    )
+    @pytest.mark.django_db
+    def test_sign_up_allowed_domain_creates_user(
+        self, django_client, db, setup_instance, with_allowed_domains, allowed_config, email
+    ):
+        """Sign-up with an allowed domain creates the user."""
+        with_allowed_domains(allowed_config)
+        url = reverse("sign-up")
+        response = django_client.post(url, {"email": email, "password": "ValidPass!99"}, follow=False)
+        assert response.status_code == 302
+        assert "EMAIL_DOMAIN_NOT_ALLOWED" not in response.url
+        assert User.objects.filter(email=email).exists()
+
+    # ------------------------------------------------------------------
+    # Magic-link generation: blocked domains
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "email",
+        [
+            pytest.param("spy@external.io", id="external-io"),
+            pytest.param("hacker@other.net", id="other-net"),
+        ],
+    )
+    @pytest.mark.django_db
+    @patch("plane.bgtasks.magic_link_code_task.magic_link.delay")
+    def test_magic_generate_blocked_domain_returns_error(
+        self, mock_magic_link, api_client, db, setup_instance, with_allowed_domains, email
+    ):
+        """Generating a magic link for a blocked domain returns 400 and does not queue the task."""
+        User.objects.create(email=email)
+        with_allowed_domains("company.com")
+
+        ri = redis_instance()
+        ri.delete(f"magic_{email}")
+
+        url = reverse("magic-generate")
+        response = api_client.post(url, {"email": email}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "error_code" in response.data
+        mock_magic_link.assert_not_called()
+
+    # ------------------------------------------------------------------
+    # Magic-link generation: allowed domains
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize(
+        "allowed_config,email",
+        [
+            pytest.param("company.com", "insider@company.com", id="single-domain"),
+            pytest.param(
+                "company.com,subsidiary.org",
+                "member@subsidiary.org",
+                id="multi-domain-second-entry",
+            ),
+        ],
+    )
+    @pytest.mark.django_db
+    @patch("plane.bgtasks.magic_link_code_task.magic_link.delay")
+    def test_magic_generate_allowed_domain_succeeds(
+        self, mock_magic_link, api_client, db, setup_instance, with_allowed_domains, allowed_config, email
+    ):
+        """Generating a magic link for an allowed domain returns 200 with the magic key."""
+        User.objects.create(email=email)
+        with_allowed_domains(allowed_config)
+
+        ri = redis_instance()
+        ri.delete(f"magic_{email}")
+
+        url = reverse("magic-generate")
+        response = api_client.post(url, {"email": email}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        assert "key" in response.data
+

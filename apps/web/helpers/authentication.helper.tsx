@@ -43,6 +43,7 @@ export enum EAuthenticationErrorCodes {
   EMAIL_REQUIRED = "5010",
   SIGNUP_DISABLED = "5015",
   MAGIC_LINK_LOGIN_DISABLED = "5016",
+  EMAIL_DOMAIN_NOT_ALLOWED = "5017",
   PASSWORD_LOGIN_DISABLED = "5018",
   USER_ACCOUNT_DEACTIVATED = "5019",
   // Password strength
@@ -128,6 +129,10 @@ const errorCodeMessages: {
   [EAuthenticationErrorCodes.SIGNUP_DISABLED]: {
     title: `Sign up disabled`,
     message: () => `Sign up disabled. Please contact your administrator.`,
+  },
+  [EAuthenticationErrorCodes.EMAIL_DOMAIN_NOT_ALLOWED]: {
+    title: `Email domain not allowed`,
+    message: () => `Your email domain is not allowed. Please contact your administrator.`,
   },
   [EAuthenticationErrorCodes.MAGIC_LINK_LOGIN_DISABLED]: {
     title: `Magic link login disabled`,
@@ -378,6 +383,7 @@ export const authErrorHandler = (errorCode: EAuthenticationErrorCodes, email?: s
     EAuthenticationErrorCodes.INVALID_EMAIL,
     EAuthenticationErrorCodes.EMAIL_REQUIRED,
     EAuthenticationErrorCodes.SIGNUP_DISABLED,
+    EAuthenticationErrorCodes.EMAIL_DOMAIN_NOT_ALLOWED,
     EAuthenticationErrorCodes.MAGIC_LINK_LOGIN_DISABLED,
     EAuthenticationErrorCodes.PASSWORD_LOGIN_DISABLED,
     EAuthenticationErrorCodes.USER_ACCOUNT_DEACTIVATED,
